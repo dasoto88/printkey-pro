@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.egg-info/
+dist/
+build/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Uploads (archivos de clientes — no van al repo)
+backend/uploads/
+
+# Build del frontend (se regenera en Render)
+backend/static_frontend/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credenciales (NUNCA subir esto)
+google_credentials.json
+*.key
