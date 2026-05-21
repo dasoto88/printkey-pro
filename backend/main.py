@@ -2,7 +2,7 @@
 PrintKey Pro — Backend API (FastAPI)
 API completa para tienda de resets de impresoras.
 """
-import os, json, shutil
+import os, json, shutil, threading, time
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
@@ -22,6 +22,23 @@ from dotenv import load_dotenv
 import sheets_db as db
 
 load_dotenv()
+
+# ── Keep-alive: ping propio cada 4 minutos para que Render no duerma ──
+def _keep_alive():
+    """Hilo en background que evita que el servidor se duerma en Render free."""
+    time.sleep(60)  # Esperar 1 min al arranque antes del primer ping
+    while True:
+        try:
+            backend_url = os.getenv("BACKEND_URL", "")
+            if backend_url:
+                import urllib.request
+                urllib.request.urlopen(f"{backend_url}/api/health", timeout=10)
+        except Exception:
+            pass
+        time.sleep(240)  # cada 4 minutos
+
+_t = threading.Thread(target=_keep_alive, daemon=True)
+_t.start()
 
 # ── Configuración ─────────────────────────────────────────────
 SECRET_KEY   = os.getenv("SECRET_KEY", "printkey-super-secret-2026-xK9p")
