@@ -560,6 +560,19 @@ def actualizar_web(wid: str, data: dict) -> dict | None:
     return next((w for w in get_webs(solo_activas=False) if w["id"] == wid), None)
 
 
+def eliminar_producto(pid: str) -> bool:
+    """Elimina físicamente un producto de la hoja (o lo marca como eliminado)."""
+    ws   = _sheet("productos")
+    rows = ws.get_all_values()
+    if not rows:
+        return False
+    for i, row in enumerate(rows[1:], start=2):
+        if row and row[0] == pid:
+            ws.delete_rows(i)
+            return True
+    return False
+
+
 def actualizar_password_por_email(email: str, new_hash: str) -> bool:
     ws   = _sheet("usuarios")
     rows = ws.get_all_values()

@@ -5,7 +5,8 @@ import {
   FiPackage, FiShoppingBag, FiUsers, FiDollarSign,
   FiPlus, FiEdit2, FiUpload, FiImage, FiFile,
   FiToggleLeft, FiToggleRight, FiBook, FiSettings,
-  FiDownload, FiCheck, FiGlobe, FiShield, FiKey, FiTrash2, FiLink
+  FiDownload, FiCheck, FiGlobe, FiShield, FiKey, FiTrash2, FiLink,
+  FiEdit3, FiSave, FiX
 } from 'react-icons/fi'
 
 const TABS = ['Estadísticas', 'Productos', 'Nuevo Producto', 'Blog', 'Compras', 'Webs Sugeridas', 'Seguridad', 'Configuración']
@@ -101,6 +102,15 @@ function TabProductos() {
     } catch { toast.error('Error') }
   }
 
+  const eliminar = async (p) => {
+    if (!window.confirm(`¿Eliminar "${p.nombre}"? Esta acción no se puede deshacer.`)) return
+    try {
+      await api.delete(`/admin/productos/${p.id}`)
+      toast.success('Producto eliminado')
+      load()
+    } catch { toast.error('Error al eliminar') }
+  }
+
   if (loading) return <div className="page-loader"><div className="spinner" /></div>
 
   return (
@@ -111,15 +121,26 @@ function TabProductos() {
           <p>Sin productos. Usa "Nuevo Producto" para agregar.</p>
         </div>
       )}
-      {productos.map(p => <ProductoRow key={p.id} p={p} onToggleActivo={toggleActivo} onToggleOferta={toggleOferta} onEdit={setEditing} onSaved={load} />)}
+      {productos.map(p => <ProductoRow key={p.id} p={p} onToggleActivo={toggleActivo} onToggleOferta={toggleOferta} onEdit={setEditing} onSaved={load} onEliminar={eliminar} />)}
     </div>
   )
 }
 
-function ProductoRow({ p, onToggleActivo, onToggleOferta, onEdit, onSaved }) {
+function ProductoRow({ p, onToggleActivo, onToggleOferta, onEdit, onSaved, onEliminar }) {
   const [editPrice, setEditPrice] = useState(false)
   const [precio, setPrecio]       = useState(p.precio)
   const [oferta, setOferta]       = useState(p.precio_oferta || '')
+  const [editOpen, setEditOpen]   = useState(false)
+  const [editForm, setEditForm]   = useState({
+    nombre: p.nombre,
+    descripcion_corta: p.descripcion_corta || '',
+    descripcion_larga: p.descripcion_larga || '',
+    precio: p.precio,
+    precio_oferta: p.precio_oferta || '',
+    categoria: p.categoria || '',
+    compatibilidad: p.compatibilidad || '',
+  })
+  const [saving, setSaving] = useState(false)
 
   const savePrice = async () => {
     try {
@@ -130,9 +151,24 @@ function ProductoRow({ p, onToggleActivo, onToggleOferta, onEdit, onSaved }) {
     } catch { toast.error('Error') }
   }
 
+  const saveEdit = async () => {
+    setSaving(true)
+    try {
+      await api.patch(`/admin/productos/${p.id}`, {
+        ...editForm,
+        precio: Number(editForm.precio),
+        precio_oferta: editForm.precio_oferta ? Number(editForm.precio_oferta) : null,
+      })
+      toast.success('Producto actualizado')
+      setEditOpen(false)
+      onSaved()
+    } catch { toast.error('Error al guardar') }
+    finally { setSaving(false) }
+  }
+
   return (
-    <div className="glass-card" style={{ padding:'16px 20px' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
+    <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ padding:'16px 20px', display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
         {/* Image thumb */}
         <div style={{ width:52, height:52, background:'#1e293b', borderRadius:8, overflow:'hidden', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
           {p.imagen_url ? <img src={p.imagen_url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <FiPackage size={18} color="#334155" />}
@@ -179,8 +215,61 @@ function ProductoRow({ p, onToggleActivo, onToggleOferta, onEdit, onSaved }) {
           </button>
           <UploadFileBtn productoId={p.id} tipo="imagen" />
           <UploadFileBtn productoId={p.id} tipo="archivo" />
+          <button onClick={() => setEditOpen(prev => !prev)} className="btn btn-ghost btn-sm" title="Editar producto">
+            <FiEdit3 size={13} color="#38bdf8" />
+          </button>
+          <button onClick={() => onEliminar(p)} className="btn btn-ghost btn-sm" title="Eliminar producto">
+            <FiTrash2 size={13} color="#f87171" />
+          </button>
         </div>
       </div>
+
+      {editOpen && (
+        <div style={{ borderTop:'1px solid rgba(56,189,248,0.1)', padding:'16px 20px', background:'rgba(0,0,0,0.2)' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+            <div className="form-group">
+              <label className="form-label">Nombre</label>
+              <input className="input" value={editForm.nombre} onChange={e=>setEditForm(p=>({...p,nombre:e.target.value}))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Categoría</label>
+              <select className="select" value={editForm.categoria} onChange={e=>setEditForm(p=>({...p,categoria:e.target.value}))}>
+                {['Epson','Canon','Software','Bundle','Servicio'].map(c=><option key={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-group" style={{ marginBottom:12 }}>
+            <label className="form-label">Descripción corta</label>
+            <input className="input" value={editForm.descripcion_corta} onChange={e=>setEditForm(p=>({...p,descripcion_corta:e.target.value}))} />
+          </div>
+          <div className="form-group" style={{ marginBottom:12 }}>
+            <label className="form-label">Descripción larga</label>
+            <textarea className="textarea" rows={4} value={editForm.descripcion_larga} onChange={e=>setEditForm(p=>({...p,descripcion_larga:e.target.value}))} />
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:16 }}>
+            <div className="form-group">
+              <label className="form-label">Precio</label>
+              <input type="number" className="input" value={editForm.precio} onChange={e=>setEditForm(p=>({...p,precio:e.target.value}))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Precio oferta</label>
+              <input type="number" className="input" value={editForm.precio_oferta} onChange={e=>setEditForm(p=>({...p,precio_oferta:e.target.value}))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Compatibilidad</label>
+              <input className="input" value={editForm.compatibilidad} onChange={e=>setEditForm(p=>({...p,compatibilidad:e.target.value}))} />
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:10 }}>
+            <button onClick={saveEdit} disabled={saving} className="btn btn-primary btn-sm">
+              {saving ? 'Guardando...' : <><FiSave size={13}/> Guardar</>}
+            </button>
+            <button onClick={()=>setEditOpen(false)} className="btn btn-ghost btn-sm">
+              <FiX size={13}/> Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -387,6 +476,128 @@ function TabCompras() {
   )
 }
 
+/* ── WebRow ─────────────────────────────────────────────── */
+function WebRow({ web, onDeleted, onSaved }) {
+  const [editOpen, setEditOpen] = useState(false)
+  const [form, setForm] = useState({
+    titulo: web.titulo,
+    url: web.url,
+    descripcion: web.descripcion || '',
+    categoria: web.categoria || '',
+    orden: web.orden || 0,
+  })
+  const [saving, setSaving]     = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const imgRef = useRef()
+
+  const set = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
+
+  const saveEdit = async () => {
+    setSaving(true)
+    try {
+      await api.patch(`/admin/webs/${web.id}`, form)
+      toast.success('Web actualizada')
+      setEditOpen(false)
+      onSaved()
+    } catch { toast.error('Error') }
+    finally { setSaving(false) }
+  }
+
+  const eliminar = async () => {
+    if (!window.confirm(`¿Eliminar "${web.titulo}"?`)) return
+    try {
+      await api.delete(`/admin/webs/${web.id}`)
+      toast.success('Eliminada')
+      onDeleted()
+    } catch { toast.error('Error') }
+  }
+
+  const subirImagen = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploading(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('web_id', web.id)
+    try {
+      await api.post('/admin/upload-imagen-web', fd)
+      toast.success('Imagen subida')
+      onSaved()
+    } catch { toast.error('Error al subir imagen') }
+    finally { setUploading(false); e.target.value = '' }
+  }
+
+  return (
+    <div className="glass-card" style={{ padding: 0, overflow:'hidden', marginBottom: 8 }}>
+      <div style={{ padding:'14px 18px', display:'flex', alignItems:'center', gap:12 }}>
+        {/* Thumbnail */}
+        <div style={{ width:52, height:52, borderRadius:8, overflow:'hidden', flexShrink:0, background:'#1e293b', display:'flex', alignItems:'center', justifyContent:'center' }}>
+          {web.imagen_url
+            ? <img src={web.imagen_url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+            : <FiGlobe size={20} color="#334155" />}
+        </div>
+        {/* Info */}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontWeight:700, fontSize:'0.9rem' }}>{web.titulo}</div>
+          <a href={web.url} target="_blank" rel="noopener noreferrer"
+            style={{ color:'#a78bfa', fontSize:'0.78rem', textDecoration:'none' }}>
+            {web.url.length > 50 ? web.url.slice(0,50)+'...' : web.url}
+          </a>
+        </div>
+        {/* Actions */}
+        <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+          <input ref={imgRef} type="file" accept="image/*" style={{ display:'none' }} onChange={subirImagen} />
+          <button onClick={()=>imgRef.current.click()} disabled={uploading} className="btn btn-ghost btn-sm" title="Subir imagen desde PC">
+            <FiImage size={13} color="#38bdf8" />
+          </button>
+          <button onClick={()=>setEditOpen(p=>!p)} className="btn btn-ghost btn-sm" title="Editar">
+            <FiEdit3 size={13} color="#38bdf8" />
+          </button>
+          <button onClick={eliminar} className="btn btn-ghost btn-sm" title="Eliminar">
+            <FiTrash2 size={13} color="#f87171" />
+          </button>
+        </div>
+      </div>
+      {editOpen && (
+        <div style={{ borderTop:'1px solid rgba(167,139,250,0.15)', padding:'16px 18px', background:'rgba(0,0,0,0.2)' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+            <div className="form-group">
+              <label className="form-label">Título</label>
+              <input className="input" value={form.titulo} onChange={set('titulo')} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">URL</label>
+              <input type="url" className="input" value={form.url} onChange={set('url')} />
+            </div>
+          </div>
+          <div className="form-group" style={{ marginBottom:12 }}>
+            <label className="form-label">Descripción</label>
+            <textarea className="textarea" rows={3} value={form.descripcion} onChange={set('descripcion')} />
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
+            <div className="form-group">
+              <label className="form-label">Categoría</label>
+              <input className="input" value={form.categoria} onChange={set('categoria')} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Orden</label>
+              <input type="number" className="input" value={form.orden} onChange={set('orden')} />
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:10 }}>
+            <button onClick={saveEdit} disabled={saving} className="btn btn-primary btn-sm">
+              {saving ? 'Guardando...' : <><FiSave size={13}/> Guardar</>}
+            </button>
+            <button onClick={()=>setEditOpen(false)} className="btn btn-ghost btn-sm">
+              <FiX size={13}/> Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── Webs Sugeridas ────────────────────────────────────── */
 function TabWebsSugeridas() {
   const empty = { titulo: '', url: '', descripcion: '', imagen_url: '', categoria: '', orden: 0 }
@@ -413,15 +624,6 @@ function TabWebsSugeridas() {
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Error al guardar')
     } finally { setSending(false) }
-  }
-
-  const eliminar = async (wid) => {
-    if (!window.confirm('¿Eliminar esta web?')) return
-    try {
-      await api.delete(`/admin/webs/${wid}`)
-      toast.success('Web eliminada')
-      load()
-    } catch { toast.error('Error') }
   }
 
   if (loading) return <div className="page-loader"><div className="spinner" /></div>
@@ -471,28 +673,15 @@ function TabWebsSugeridas() {
         <h2 style={{ fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
           <FiLink size={18} /> {webs.length} web{webs.length !== 1 ? 's' : ''} publicada{webs.length !== 1 ? 's' : ''}
         </h2>
-        {webs.length === 0 && (
-          <div style={{ textAlign: 'center', padding: 40, color: '#475569' }}>
-            <FiGlobe size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
-            <p>Aún no has agregado webs</p>
-          </div>
-        )}
-        {webs.map(w => (
-          <div key={w.id} className="glass-card" style={{ padding: '14px 18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 2 }}>{w.titulo}</div>
-                <a href={w.url} target="_blank" rel="noopener noreferrer"
-                  style={{ color: '#a78bfa', fontSize: '0.78rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <FiLink size={11} />{w.url.length > 40 ? w.url.slice(0, 40) + '...' : w.url}
-                </a>
-              </div>
-              <button onClick={() => eliminar(w.id)} className="btn btn-ghost btn-sm" title="Eliminar">
-                <FiTrash2 size={13} color="#f87171" />
-              </button>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {webs.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 40, color: '#475569' }}>
+              <FiGlobe size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
+              <p>Aún no has agregado webs</p>
             </div>
-          </div>
-        ))}
+          )}
+          {webs.map(w => <WebRow key={w.id} web={w} onDeleted={load} onSaved={load} />)}
+        </div>
       </div>
     </div>
   )

@@ -921,6 +921,31 @@ async def admin_eliminar_web(wid: str, request: Request):
     return {"ok": True}
 
 
+@app.delete("/api/admin/productos/{pid}")
+async def admin_eliminar_producto(pid: str, request: Request):
+    get_admin(request)
+    ok = db.eliminar_producto(pid)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    return {"ok": True}
+
+
+@app.post("/api/admin/upload-imagen-web")
+async def admin_upload_imagen_web(
+    request: Request,
+    file: UploadFile = File(...),
+    web_id: str = Form(...),
+):
+    get_admin(request)
+    ext      = Path(file.filename).suffix or ".jpg"
+    img_path = UPLOAD_DIR / f"web_{web_id}{ext}"
+    with open(img_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    url = f"/static/web_{web_id}{ext}"
+    db.actualizar_web(web_id, {"imagen_url": url})
+    return {"ok": True, "url": url}
+
+
 # ── Servir el frontend React (build) ──────────────────────────────
 # Solo se activa si existe la carpeta static_frontend (producción)
 if FRONTEND_DIR.exists():
