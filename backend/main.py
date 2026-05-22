@@ -694,11 +694,31 @@ async def admin_upload_imagen(
     producto_id: str = Form(...),
 ):
     get_admin(request)
-    ext      = Path(file.filename).suffix
-    img_path = UPLOAD_DIR / f"img_{producto_id}{ext}"
-    with open(img_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    url = f"/static/img_{producto_id}{ext}"
+    import base64, requests as req
+    file_bytes = await file.read()
+
+    # Intentar subir a Imgur (anónimo)
+    url = None
+    try:
+        b64 = base64.b64encode(file_bytes).decode()
+        resp = req.post(
+            "https://api.imgur.com/3/upload",
+            headers={"Authorization": "Client-ID 546c25a59c58ad7"},
+            data={"image": b64},
+            timeout=30
+        )
+        if resp.status_code == 200:
+            url = resp.json()["data"]["link"]
+    except Exception:
+        pass
+
+    # Fallback: guardar localmente
+    if not url:
+        ext = Path(file.filename).suffix or ".jpg"
+        img_path = UPLOAD_DIR / f"img_{producto_id}{ext}"
+        img_path.write_bytes(file_bytes)
+        url = f"/static/img_{producto_id}{ext}"
+
     db.actualizar_producto(producto_id, {"imagen_url": url})
     return {"ok": True, "url": url}
 
@@ -741,11 +761,31 @@ async def admin_subir_archivo(
 async def admin_subir_imagen(
     pid: str, imagen: UploadFile = File(...), request: Request = None):
     get_admin(request)
-    ext      = Path(imagen.filename).suffix
-    img_path = UPLOAD_DIR / f"img_{pid}{ext}"
-    with open(img_path, "wb") as f:
-        shutil.copyfileobj(imagen.file, f)
-    url = f"/static/img_{pid}{ext}"
+    import base64, requests as req
+    file_bytes = await imagen.read()
+
+    # Intentar subir a Imgur (anónimo)
+    url = None
+    try:
+        b64 = base64.b64encode(file_bytes).decode()
+        resp = req.post(
+            "https://api.imgur.com/3/upload",
+            headers={"Authorization": "Client-ID 546c25a59c58ad7"},
+            data={"image": b64},
+            timeout=30
+        )
+        if resp.status_code == 200:
+            url = resp.json()["data"]["link"]
+    except Exception:
+        pass
+
+    # Fallback: guardar localmente
+    if not url:
+        ext = Path(imagen.filename).suffix or ".jpg"
+        img_path = UPLOAD_DIR / f"img_{pid}{ext}"
+        img_path.write_bytes(file_bytes)
+        url = f"/static/img_{pid}{ext}"
+
     db.actualizar_producto(pid, {"imagen_url": url})
     return {"ok": True, "url": url}
 
@@ -937,11 +977,29 @@ async def admin_upload_imagen_web(
     web_id: str = Form(...),
 ):
     get_admin(request)
-    ext      = Path(file.filename).suffix or ".jpg"
-    img_path = UPLOAD_DIR / f"web_{web_id}{ext}"
-    with open(img_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    url = f"/static/web_{web_id}{ext}"
+    import base64, requests as req
+    file_bytes = await file.read()
+
+    url = None
+    try:
+        b64 = base64.b64encode(file_bytes).decode()
+        resp = req.post(
+            "https://api.imgur.com/3/upload",
+            headers={"Authorization": "Client-ID 546c25a59c58ad7"},
+            data={"image": b64},
+            timeout=30
+        )
+        if resp.status_code == 200:
+            url = resp.json()["data"]["link"]
+    except Exception:
+        pass
+
+    if not url:
+        ext = Path(file.filename).suffix or ".jpg"
+        img_path = UPLOAD_DIR / f"web_{web_id}{ext}"
+        img_path.write_bytes(file_bytes)
+        url = f"/static/web_{web_id}{ext}"
+
     db.actualizar_web(web_id, {"imagen_url": url})
     return {"ok": True, "url": url}
 

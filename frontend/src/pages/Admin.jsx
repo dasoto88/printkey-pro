@@ -288,6 +288,7 @@ function UploadFileBtn({ productoId, tipo }) {
     try {
       await api.post(`/admin/upload-${tipo}`, fd)
       toast.success(`${tipo === 'imagen' ? 'Imagen' : 'Archivo'} subido`)
+      window.location.reload()
     } catch { toast.error('Error al subir') }
     finally { setUping(false); e.target.value = '' }
   }
