@@ -61,6 +61,14 @@ export default function Login() {
               />
             </div>
 
+            <div style={{ textAlign:'right', marginTop:-8 }}>
+              <Link to="/recuperar-password" style={{ color:'#64748b', fontSize:'0.8rem', textDecoration:'none' }}
+                onMouseEnter={e => e.target.style.color = '#38bdf8'}
+                onMouseLeave={e => e.target.style.color = '#64748b'}>
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
+
             {error && <p style={{ color:'#f87171', fontSize:'0.83rem', textAlign:'center' }}>{error}</p>}
 
             <button type="submit" disabled={loading} className="btn btn-primary" style={{ width:'100%', justifyContent:'center', marginTop:4 }}>

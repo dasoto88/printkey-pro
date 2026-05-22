@@ -15,6 +15,10 @@ import Blog from './pages/Blog'
 import BlogPost from './pages/BlogPost'
 import PagoExitoso from './pages/PagoExitoso'
 import Admin from './pages/Admin'
+import Software          from './pages/Software'
+import WebsSugeridas     from './pages/WebsSugeridas'
+import RecuperarPassword from './pages/RecuperarPassword'
+import ResetPassword     from './pages/ResetPassword'
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth()
@@ -54,8 +58,12 @@ function AppInner() {
           <Route path="/blog"              element={<Blog />} />
           <Route path="/blog/:id"          element={<BlogPost />} />
           <Route path="/pago-exitoso"      element={<PagoExitoso />} />
-          <Route path="/dashboard"         element={<RequireAuth><Dashboard /></RequireAuth>} />
+          <Route path="/dashboard"           element={<RequireAuth><Dashboard /></RequireAuth>} />
           <Route path="/admin"             element={<RequireAdmin><Admin /></RequireAdmin>} />
+          <Route path="/software"          element={<Software />} />
+          <Route path="/webs"              element={<WebsSugeridas />} />
+          <Route path="/recuperar-password" element={<RecuperarPassword />} />
+          <Route path="/reset-password"    element={<ResetPassword />} />
           <Route path="*"                  element={<Navigate to="/" replace />} />
         </Routes>
       </main>

@@ -5,10 +5,10 @@ import {
   FiPackage, FiShoppingBag, FiUsers, FiDollarSign,
   FiPlus, FiEdit2, FiUpload, FiImage, FiFile,
   FiToggleLeft, FiToggleRight, FiBook, FiSettings,
-  FiDownload, FiCheck
+  FiDownload, FiCheck, FiGlobe, FiShield, FiKey, FiTrash2, FiLink
 } from 'react-icons/fi'
 
-const TABS = ['Estadísticas', 'Productos', 'Nuevo Producto', 'Blog', 'Compras', 'Configuración']
+const TABS = ['Estadísticas', 'Productos', 'Nuevo Producto', 'Blog', 'Compras', 'Webs Sugeridas', 'Seguridad', 'Configuración']
 
 export default function Admin() {
   const [tab, setTab] = useState(0)
@@ -40,7 +40,9 @@ export default function Admin() {
         {tab === 2 && <TabNuevoProducto />}
         {tab === 3 && <TabBlog />}
         {tab === 4 && <TabCompras />}
-        {tab === 5 && <TabConfig />}
+        {tab === 5 && <TabWebsSugeridas />}
+        {tab === 6 && <TabSeguridad />}
+        {tab === 7 && <TabConfig />}
       </div>
     </div>
   )
@@ -246,7 +248,7 @@ function TabNuevoProducto() {
             <div className="form-group">
               <label className="form-label">Categoría</label>
               <select className="select" value={form.categoria} onChange={set('categoria')}>
-                {['Epson','Canon','Bundle','Servicio'].map(c => <option key={c}>{c}</option>)}
+                {['Epson','Canon','Software','Bundle','Servicio'].map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -381,6 +383,211 @@ function TabCompras() {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+/* ── Webs Sugeridas ────────────────────────────────────── */
+function TabWebsSugeridas() {
+  const empty = { titulo: '', url: '', descripcion: '', imagen_url: '', categoria: '', orden: 0 }
+  const [webs, setWebs]       = useState([])
+  const [form, setForm]       = useState(empty)
+  const [sending, setSending] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  const load = () => {
+    api.get('/webs').then(r => setWebs(r.data)).finally(() => setLoading(false))
+  }
+  useEffect(() => { load() }, [])
+
+  const set = k => e => setForm(p => ({ ...p, [k]: e.target.type === 'number' ? Number(e.target.value) : e.target.value }))
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setSending(true)
+    try {
+      await api.post('/admin/webs', form)
+      toast.success('Web agregada')
+      setForm(empty)
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al guardar')
+    } finally { setSending(false) }
+  }
+
+  const eliminar = async (wid) => {
+    if (!window.confirm('¿Eliminar esta web?')) return
+    try {
+      await api.delete(`/admin/webs/${wid}`)
+      toast.success('Web eliminada')
+      load()
+    } catch { toast.error('Error') }
+  }
+
+  if (loading) return <div className="page-loader"><div className="spinner" /></div>
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+      {/* Form */}
+      <div className="glass-card" style={{ padding: 28 }}>
+        <h2 style={{ fontWeight: 700, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <FiGlobe size={18} /> Agregar web
+        </h2>
+        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div className="form-group">
+            <label className="form-label">Título *</label>
+            <input required className="input" placeholder="Ej: ViralCraft AI Studio" value={form.titulo} onChange={set('titulo')} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">URL *</label>
+            <input required type="url" className="input" placeholder="https://..." value={form.url} onChange={set('url')} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Descripción</label>
+            <textarea className="textarea" rows={3} placeholder="¿Qué hace esta web?" value={form.descripcion} onChange={set('descripcion')} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">URL imagen (opcional)</label>
+            <input className="input" placeholder="https://imagen.png" value={form.imagen_url} onChange={set('imagen_url')} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="form-group">
+              <label className="form-label">Categoría</label>
+              <input className="input" placeholder="herramientas, diseño..." value={form.categoria} onChange={set('categoria')} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Orden</label>
+              <input type="number" className="input" value={form.orden} onChange={set('orden')} min="0" />
+            </div>
+          </div>
+          <button type="submit" disabled={sending} className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>
+            {sending ? 'Guardando...' : <><FiPlus size={14} /> Agregar</>}
+          </button>
+        </form>
+      </div>
+
+      {/* List */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <h2 style={{ fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <FiLink size={18} /> {webs.length} web{webs.length !== 1 ? 's' : ''} publicada{webs.length !== 1 ? 's' : ''}
+        </h2>
+        {webs.length === 0 && (
+          <div style={{ textAlign: 'center', padding: 40, color: '#475569' }}>
+            <FiGlobe size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
+            <p>Aún no has agregado webs</p>
+          </div>
+        )}
+        {webs.map(w => (
+          <div key={w.id} className="glass-card" style={{ padding: '14px 18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 2 }}>{w.titulo}</div>
+                <a href={w.url} target="_blank" rel="noopener noreferrer"
+                  style={{ color: '#a78bfa', fontSize: '0.78rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <FiLink size={11} />{w.url.length > 40 ? w.url.slice(0, 40) + '...' : w.url}
+                </a>
+              </div>
+              <button onClick={() => eliminar(w.id)} className="btn btn-ghost btn-sm" title="Eliminar">
+                <FiTrash2 size={13} color="#f87171" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ── Seguridad (Cambio contraseña admin con 2FA) ────────── */
+function TabSeguridad() {
+  const [paso, setPaso]     = useState(1)  // 1=form contraseña, 2=código 2FA
+  const [form, setForm]     = useState({ nueva_password: '', confirmar: '' })
+  const [codigo, setCodigo] = useState('')
+  const [emailEnviado, setEmailEnviado] = useState('')
+  const [loading, setLoading] = useState(false)
+  const set = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
+
+  const solicitar = async (e) => {
+    e.preventDefault()
+    if (form.nueva_password !== form.confirmar) { toast.error('Las contraseñas no coinciden'); return }
+    if (form.nueva_password.length < 6) { toast.error('Mínimo 6 caracteres'); return }
+    setLoading(true)
+    try {
+      const r = await api.post('/admin/cambiar-password/solicitar', { nueva_password: form.nueva_password })
+      setEmailEnviado(r.data.email)
+      setPaso(2)
+      toast.success('Código enviado a tu correo')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al enviar código')
+    } finally { setLoading(false) }
+  }
+
+  const confirmar = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      await api.post('/admin/cambiar-password/confirmar', { codigo })
+      toast.success('¡Contraseña de admin actualizada!')
+      setPaso(1)
+      setForm({ nueva_password: '', confirmar: '' })
+      setCodigo('')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Código incorrecto')
+    } finally { setLoading(false) }
+  }
+
+  return (
+    <div style={{ maxWidth: 480 }}>
+      <div className="glass-card" style={{ padding: 28 }}>
+        <h2 style={{ fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <FiShield size={20} color="#f472b6" /> Cambiar contraseña de admin
+        </h2>
+        <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: 24 }}>
+          Se enviará un código de verificación a tu correo para confirmar el cambio.
+        </p>
+
+        {paso === 1 ? (
+          <form onSubmit={solicitar} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="form-group">
+              <label className="form-label"><FiKey size={13} style={{ verticalAlign: 'middle', marginRight: 6 }} />Nueva contraseña</label>
+              <input type="password" required className="input" placeholder="Mínimo 6 caracteres" value={form.nueva_password} onChange={set('nueva_password')} />
+            </div>
+            <div className="form-group">
+              <label className="form-label"><FiKey size={13} style={{ verticalAlign: 'middle', marginRight: 6 }} />Confirmar contraseña</label>
+              <input type="password" required className="input" placeholder="Repite la contraseña" value={form.confirmar} onChange={set('confirmar')} />
+            </div>
+            <button type="submit" disabled={loading} className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>
+              {loading ? 'Enviando código...' : <><FiShield size={14} /> Enviar código de verificación</>}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={confirmar} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ background: 'rgba(244,114,182,0.08)', border: '1px solid rgba(244,114,182,0.2)', borderRadius: 10, padding: 16, fontSize: '0.85rem', color: '#94a3b8' }}>
+              📬 Código enviado a <strong style={{ color: '#f1f5f9' }}>{emailEnviado}</strong>. Expira en 10 minutos.
+            </div>
+            <div className="form-group">
+              <label className="form-label"><FiKey size={13} style={{ verticalAlign: 'middle', marginRight: 6 }} />Código de verificación</label>
+              <input required className="input" placeholder="123456" maxLength={6} value={codigo} onChange={e => setCodigo(e.target.value)}
+                style={{ letterSpacing: '0.4em', fontSize: '1.2rem', textAlign: 'center' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button type="submit" disabled={loading} className="btn btn-primary">
+                {loading ? 'Verificando...' : '✅ Confirmar cambio'}
+              </button>
+              <button type="button" onClick={() => setPaso(1)} className="btn btn-ghost">Cancelar</button>
+            </div>
+          </form>
+        )}
+      </div>
+
+      <div className="glass-card" style={{ padding: 18, marginTop: 14 }}>
+        <p style={{ color: '#475569', fontSize: '0.8rem', lineHeight: 1.7 }}>
+          <strong style={{ color: '#f472b6' }}>⚙️ Configuración de email requerida:</strong><br />
+          Para que funcione el envío de códigos, agrega estas variables de entorno en Render:<br />
+          <code style={{ background: '#0f172a', padding: '2px 6px', borderRadius: 4 }}>EMAIL_FROM</code> = tu Gmail<br />
+          <code style={{ background: '#0f172a', padding: '2px 6px', borderRadius: 4 }}>EMAIL_PASS</code> = contraseña de aplicación Gmail (16 chars)
+        </p>
+      </div>
     </div>
   )
 }

@@ -25,6 +25,7 @@ HOJAS = {
     "forum_replies":  "FORUM_REPLIES",
     "blog":           "BLOG",
     "config":         "CONFIG",
+    "webs_sugeridas": "WEBS_SUGERIDAS",
 }
 
 _gc   = None   # cliente gspread
@@ -90,6 +91,7 @@ def _inicializar_hoja(ws: gspread.Worksheet, nombre: str):
             "autor","fecha_publicacion","activo","semana","categoria"
         ],
         "config": ["clave","valor"],
+        "webs_sugeridas": ["id","titulo","url","descripcion","imagen_url","categoria","activo","orden","fecha_creacion"],
     }
     if nombre in cabeceras:
         ws.append_row(cabeceras[nombre])
@@ -503,3 +505,72 @@ def set_config(clave: str, valor: str):
             ws.update_cell(i, 2, valor)
             return
     ws.append_row([clave, valor])
+
+
+# ══════════════════════════════════════════════════════════════
+#  WEBS SUGERIDAS
+# ══════════════════════════════════════════════════════════════
+
+def get_webs(solo_activas: bool = True) -> list:
+    ws   = _sheet("webs_sugeridas")
+    rows = ws.get_all_values()
+    if len(rows) < 2:
+        return []
+    cabs  = rows[0]
+    items = [_fila_a_dict(cabs, r) for r in rows[1:]]
+    if solo_activas:
+        items = [w for w in items if str(w.get("activo","1")) == "1"]
+    try:
+        items.sort(key=lambda w: int(w.get("orden",0) or 0))
+    except Exception:
+        pass
+    return items
+
+
+def crear_web(data: dict) -> dict:
+    ws  = _sheet("webs_sugeridas")
+    wid = _uid()
+    ws.append_row([
+        wid,
+        data.get("titulo",""),
+        data.get("url",""),
+        data.get("descripcion",""),
+        data.get("imagen_url",""),
+        data.get("categoria",""),
+        "1",
+        str(data.get("orden", 0)),
+        _now(),
+    ])
+    return next((w for w in get_webs(solo_activas=False) if w["id"] == wid), {})
+
+
+def actualizar_web(wid: str, data: dict) -> dict | None:
+    ws   = _sheet("webs_sugeridas")
+    rows = ws.get_all_values()
+    if not rows:
+        return None
+    cabs = rows[0]
+    for i, row in enumerate(rows[1:], start=2):
+        if row and row[0] == wid:
+            for campo, val in data.items():
+                if campo in cabs:
+                    col = cabs.index(campo) + 1
+                    ws.update_cell(i, col, str(val))
+            break
+    return next((w for w in get_webs(solo_activas=False) if w["id"] == wid), None)
+
+
+def actualizar_password_por_email(email: str, new_hash: str) -> bool:
+    ws   = _sheet("usuarios")
+    rows = ws.get_all_values()
+    if not rows:
+        return False
+    cabs  = rows[0]
+    email = email.lower().strip()
+    for i, row in enumerate(rows[1:], start=2):
+        d = _fila_a_dict(cabs, row)
+        if d.get("email","").lower() == email:
+            col = cabs.index("password_hash") + 1
+            ws.update_cell(i, col, new_hash)
+            return True
+    return False

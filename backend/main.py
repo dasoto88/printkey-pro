@@ -3,9 +3,12 @@ PrintKey Pro — Backend API (FastAPI)
 API completa para tienda de resets de impresoras.
 """
 import os, json, shutil, threading, time
+import smtplib, secrets, time as _time
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 from fastapi import (FastAPI, HTTPException, Depends, UploadFile, File,
                      Form, BackgroundTasks, Request)
@@ -46,6 +49,10 @@ ALGORITHM    = "HS256"
 TOKEN_EXPIRE = 60 * 24 * 7   # 7 días en minutos
 MP_TOKEN     = os.getenv("MP_ACCESS_TOKEN", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+EMAIL_FROM   = os.getenv("EMAIL_FROM", "")
+EMAIL_PASS   = os.getenv("EMAIL_PASS", "")
+_reset_codes: dict = {}   # email → {code, expires}
+_admin_2fa:   dict = {}   # email → {code, expires, new_hash}
 UPLOAD_DIR    = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 FRONTEND_DIR  = Path(__file__).parent / "static_frontend"
@@ -103,6 +110,31 @@ def get_admin(request: Request) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════
+#  EMAIL HELPER
+# ══════════════════════════════════════════════════════════════
+
+def _enviar_email(to: str, subject: str, body_html: str) -> bool:
+    if not EMAIL_FROM or not EMAIL_PASS:
+        print(f"[EMAIL] Sin configurar. Destinatario: {to} | Asunto: {subject}")
+        return False
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = f"PrintKey Pro <{EMAIL_FROM}>"
+        msg["To"]      = to
+        msg.attach(MIMEText(body_html, "html", "utf-8"))
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as s:
+            s.ehlo()
+            s.starttls()
+            s.login(EMAIL_FROM, EMAIL_PASS)
+            s.sendmail(EMAIL_FROM, to, msg.as_string())
+        return True
+    except Exception as e:
+        print(f"[EMAIL] Error enviando a {to}: {e}")
+        return False
+
+
+# ══════════════════════════════════════════════════════════════
 #  MODELOS PYDANTIC
 # ══════════════════════════════════════════════════════════════
 
@@ -147,6 +179,28 @@ class ProductoUpdateModel(BaseModel):
     es_oferta: Optional[str] = None
     es_bundle: Optional[str] = None
     compatibilidad: Optional[str] = None
+
+class RecuperarPassModel(BaseModel):
+    email: str
+
+class ResetPassModel(BaseModel):
+    email: str
+    codigo: str
+    nueva_password: str
+
+class CambiarPassAdminSolicitar(BaseModel):
+    nueva_password: str
+
+class CambiarPassAdminConfirmar(BaseModel):
+    codigo: str
+
+class WebCreateModel(BaseModel):
+    titulo: str
+    url: str
+    descripcion: str = ""
+    imagen_url: str = ""
+    categoria: str = "general"
+    orden: int = 0
 
 
 # ══════════════════════════════════════════════════════════════
@@ -746,6 +800,125 @@ async def admin_compras(request: Request):
         except Exception:
             c["total"] = 0
     return items
+
+
+# ── Recuperar contraseña (usuarios) ─────────────────────────
+@app.post("/api/auth/recuperar-password")
+async def recuperar_password(data: RecuperarPassModel):
+    user = db.get_usuario_por_email(data.email)
+    if user:
+        code = str(secrets.randbelow(900000) + 100000)
+        _reset_codes[data.email.lower()] = {
+            "code": code, "expires": _time.time() + 900
+        }
+        html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px">
+          <h2 style="color:#0ea5e9">🔑 Recuperar contraseña — PrintKey Pro</h2>
+          <p>Recibimos una solicitud para restablecer tu contraseña.</p>
+          <p style="font-size:2.4rem;font-weight:bold;background:#e0f2fe;color:#0c4a6e;
+             padding:20px;border-radius:10px;text-align:center;letter-spacing:10px">{code}</p>
+          <p style="color:#64748b;font-size:0.88rem">⏱️ Este código expira en <strong>15 minutos</strong>.<br>
+          Si no solicitaste esto, ignora este mensaje.</p>
+        </div>"""
+        _enviar_email(data.email, "🔑 Código de recuperación — PrintKey Pro", html)
+    return {"ok": True, "mensaje": "Si el correo existe recibirás un código en tu bandeja."}
+
+
+@app.post("/api/auth/reset-password")
+async def reset_password(data: ResetPassModel):
+    email = data.email.lower().strip()
+    entry = _reset_codes.get(email)
+    if not entry:
+        raise HTTPException(400, "Código inválido o expirado")
+    if _time.time() > entry["expires"]:
+        _reset_codes.pop(email, None)
+        raise HTTPException(400, "El código ha expirado. Solicita uno nuevo.")
+    if entry["code"] != data.codigo.strip():
+        raise HTTPException(400, "Código incorrecto")
+    if len(data.nueva_password) < 6:
+        raise HTTPException(400, "La contraseña debe tener al menos 6 caracteres")
+    new_hash = db._hash_pass(data.nueva_password)
+    ok = db.actualizar_password_por_email(email, new_hash)
+    if not ok:
+        raise HTTPException(404, "Usuario no encontrado")
+    _reset_codes.pop(email, None)
+    return {"ok": True, "mensaje": "Contraseña actualizada correctamente"}
+
+
+# ── Cambio de contraseña admin con 2FA ──────────────────────
+@app.post("/api/admin/cambiar-password/solicitar")
+async def admin_cambiar_pass_solicitar(data: CambiarPassAdminSolicitar, request: Request):
+    user = get_admin(request)
+    if len(data.nueva_password) < 6:
+        raise HTTPException(400, "La contraseña debe tener al menos 6 caracteres")
+    code     = str(secrets.randbelow(900000) + 100000)
+    email    = user["email"]
+    new_hash = db._hash_pass(data.nueva_password)
+    _admin_2fa[email.lower()] = {
+        "code": code, "expires": _time.time() + 600, "new_hash": new_hash
+    }
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px">
+      <h2 style="color:#f472b6">🔐 Verificación Admin — PrintKey Pro</h2>
+      <p>Se solicitó un <strong>cambio de contraseña de administrador</strong>.</p>
+      <p style="font-size:2.4rem;font-weight:bold;background:#fce7f3;color:#831843;
+         padding:20px;border-radius:10px;text-align:center;letter-spacing:10px">{code}</p>
+      <p style="color:#64748b;font-size:0.88rem">⏱️ Código válido por <strong>10 minutos</strong>.<br>
+      ⚠️ Si no fuiste tú, cambia tu contraseña de email inmediatamente.</p>
+    </div>"""
+    sent = _enviar_email(email, "🔐 Código 2FA — Cambio contraseña Admin", html)
+    return {"ok": True, "email_enviado": sent, "email": email}
+
+
+@app.post("/api/admin/cambiar-password/confirmar")
+async def admin_cambiar_pass_confirmar(data: CambiarPassAdminConfirmar, request: Request):
+    user  = get_admin(request)
+    email = user["email"].lower()
+    entry = _admin_2fa.get(email)
+    if not entry:
+        raise HTTPException(400, "No hay solicitud pendiente. Vuelve a iniciar el proceso.")
+    if _time.time() > entry["expires"]:
+        _admin_2fa.pop(email, None)
+        raise HTTPException(400, "Código expirado. Solicita uno nuevo.")
+    if entry["code"] != data.codigo.strip():
+        raise HTTPException(400, "Código incorrecto")
+    ok = db.actualizar_password_por_email(email, entry["new_hash"])
+    if not ok:
+        raise HTTPException(500, "Error al actualizar contraseña")
+    _admin_2fa.pop(email, None)
+    return {"ok": True, "mensaje": "Contraseña de admin actualizada correctamente"}
+
+
+# ── Webs Sugeridas ───────────────────────────────────────────
+@app.get("/api/webs")
+async def listar_webs():
+    return db.get_webs(solo_activas=True)
+
+
+@app.post("/api/admin/webs")
+async def admin_crear_web(data: WebCreateModel, request: Request):
+    get_admin(request)
+    return db.crear_web(data.dict())
+
+
+@app.patch("/api/admin/webs/{wid}")
+async def admin_actualizar_web(wid: str, request: Request):
+    get_admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Body inválido")
+    result = db.actualizar_web(wid, body)
+    if not result:
+        raise HTTPException(404, "Web no encontrada")
+    return result
+
+
+@app.delete("/api/admin/webs/{wid}")
+async def admin_eliminar_web(wid: str, request: Request):
+    get_admin(request)
+    db.actualizar_web(wid, {"activo": "0"})
+    return {"ok": True}
 
 
 # ── Servir el frontend React (build) ──────────────────────────────

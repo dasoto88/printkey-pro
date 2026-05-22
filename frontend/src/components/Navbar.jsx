@@ -19,10 +19,12 @@ export default function Navbar() {
   const handleLogout = () => { logout(); navigate('/') }
 
   const links = [
-    { to: '/',       label: 'Inicio' },
-    { to: '/tienda', label: 'Tienda' },
-    { to: '/forum',  label: 'Foro' },
-    { to: '/blog',   label: 'Info' },
+    { to: '/',        label: 'Inicio' },
+    { to: '/tienda',  label: 'Tienda' },
+    { to: '/software', label: 'Software' },
+    { to: '/webs',    label: 'Webs' },
+    { to: '/forum',   label: 'Foro' },
+    { to: '/blog',    label: 'Info' },
   ]
 
   return (
