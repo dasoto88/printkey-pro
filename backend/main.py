@@ -477,15 +477,20 @@ async def descargar(compra_id: str, producto_id: str, request: Request):
     if not archivo_path:
         raise HTTPException(status_code=404, detail="Archivo no disponible aún")
 
+    # Registrar descarga
+    db.incrementar_descargas(producto_id)
+
+    # Si el archivo está en un host externo (gofile.io, etc.) redirigir
+    if archivo_path.startswith("http://") or archivo_path.startswith("https://"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=archivo_path)
+
     ruta = Path(archivo_path)
     if not ruta.is_absolute():
         ruta = UPLOAD_DIR / archivo_path
 
     if not ruta.exists():
         raise HTTPException(status_code=404, detail="Archivo no encontrado en el servidor")
-
-    # Registrar descarga
-    db.incrementar_descargas(producto_id)
 
     return FileResponse(
         path=str(ruta),
